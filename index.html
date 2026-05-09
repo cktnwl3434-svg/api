@@ -84,6 +84,31 @@
   const BASE = "https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty";
   const gradeInfo = { "1":{label:"좋음",cls:"grade-1"}, "2":{label:"보통",cls:"grade-2"}, "3":{label:"나쁨",cls:"grade-3"}, "4":{label:"매우나쁨",cls:"grade-4"} };
 
+  async function tryFetch(sido) {
+    const target = `${BASE}?serviceKey=${encodeURIComponent(API_KEY)}&returnType=json&numOfRows=10&pageNo=1&sidoName=${encodeURIComponent(sido)}&ver=1.0`;
+
+    // 프록시 순서대로 시도
+    const proxies = [
+      `https://corsproxy.io/?${encodeURIComponent(target)}`,
+      `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(target)}`,
+      target
+    ];
+
+    for (const url of proxies) {
+      try {
+        const res = await fetch(url);
+        const text = await res.text();
+        // JSON 파싱 시도
+        const data = JSON.parse(text);
+        const items = data?.response?.body?.items;
+        if (items && items.length > 0) return items;
+      } catch(e) {
+        continue;
+      }
+    }
+    throw new Error("모든 프록시 실패 - 잠시 후 다시 시도해주세요");
+  }
+
   async function fetchData() {
     const sido = document.getElementById("sidoSelect").value;
     if (!sido) { alert("시/도를 선택하세요."); return; }
@@ -91,21 +116,11 @@
     btn.disabled = true; btn.textContent = "⏳ 불러오는 중...";
     document.getElementById("resultArea").innerHTML = '<div class="loading">데이터 불러오는 중...</div>';
 
-    const target = `${BASE}?serviceKey=${encodeURIComponent(API_KEY)}&returnType=json&numOfRows=10&pageNo=1&sidoName=${encodeURIComponent(sido)}&ver=1.0`;
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(target)}`;
-
     try {
-      const res = await fetch(proxyUrl);
-      const outer = await res.json();
-      const data = JSON.parse(outer.contents);
-      const items = data?.response?.body?.items;
-      if (!items || items.length === 0) {
-        document.getElementById("resultArea").innerHTML = '<div class="empty">데이터가 없습니다. 잠시 후 다시 시도해주세요.</div>';
-        return;
-      }
+      const items = await tryFetch(sido);
       render(items, sido);
     } catch(e) {
-      document.getElementById("resultArea").innerHTML = `<div class="error">⚠️ 오류: ${e.message}</div>`;
+      document.getElementById("resultArea").innerHTML = `<div class="error">⚠️ ${e.message}</div>`;
     } finally {
       btn.disabled = false; btn.textContent = "🔍 조회";
     }
